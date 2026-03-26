@@ -1,20 +1,22 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr
 from pymongo import MongoClient
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
-# ================== BASIC CONFIG ==================
-SECRET_KEY = "mysecretkey"
+# ================= CONFIG =================
+SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 app = FastAPI()
 
-# ================== CORS ==================
+# ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,26 +25,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================== DATABASE ==================
+# ================= STATIC =================
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ================= DATABASE =================
 client = MongoClient("mongodb://localhost:27017/")
 db = client["auth_db"]
 users = db["users"]
 
-# ================== PASSWORD ==================
+# ================= PASSWORD =================
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def hash_password(password):
-    return pwd_context.hash(password)
+def hash_password(p):
+    return pwd_context.hash(p)
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain, hashed)
+def verify_password(p, h):
+    return pwd_context.verify(p, h)
 
-# ================== TOKEN ==================
+# ================= TOKEN =================
 def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    data.update({"exp": datetime.utcnow() + timedelta(minutes=30)})
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -50,50 +53,86 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
-        if email is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return email
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
 
-# ================== MODELS ==================
+        if not email:
+            raise HTTPException(401, "Invalid token")
+
+        user = users.find_one({"email": email})
+        if not user:
+            raise HTTPException(401, "User not found")
+
+        return email
+
+    except JWTError as e:
+        print("JWT ERROR:", e)
+        raise HTTPException(401, "Invalid token")
+
+# ================= MODELS =================
 class User(BaseModel):
     email: EmailStr
     password: str
 
-# ================== ROUTES ==================
+# ================= ROUTES =================
 
-# Test route (VERY IMPORTANT)
 @app.get("/")
 def home():
-    return {"message": "Backend running successfully"}
+    return FileResponse("static/login.html")
 
-# Register
+@app.get("/register-page")
+def register_page():
+    return FileResponse("static/register.html")
+
+@app.get("/dashboard")
+def dashboard():
+    return FileResponse("static/dashboard.html")
+
+# REGISTER
 @app.post("/register")
 def register(user: User):
-    if users.find_one({"email": user.email}):
-        raise HTTPException(status_code=400, detail="User already exists")
+    try:
+        print("REGISTER HIT:", user.email)
 
-    users.insert_one({
-        "email": user.email,
-        "password": hash_password(user.password)
-    })
+        if users.find_one({"email": user.email}):
+            raise HTTPException(400, "User already exists")
 
-    return {"message": "User registered"}
+        users.insert_one({
+            "email": user.email,
+            "password": hash_password(user.password)
+        })
 
-# Login
+        return {"message": "Registered successfully"}
+
+    except Exception as e:
+        print("REGISTER ERROR:", e)
+        raise HTTPException(500, "Server error")
+
+# LOGIN
 @app.post("/login")
-def login(user: User):
-    db_user = users.find_one({"email": user.email})
+def login(form: OAuth2PasswordRequestForm = Depends()):
+    try:
+        print("LOGIN HIT:", form.username)
 
-    if not db_user or not verify_password(user.password, db_user["password"]):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+        db_user = users.find_one({"email": form.username})
+        print("DB USER:", db_user)
 
-    token = create_token({"sub": user.email})
+        if not db_user:
+            raise HTTPException(400, "User not found")
 
-    return {"access_token": token}
+        if not verify_password(form.password, db_user["password"]):
+            raise HTTPException(400, "Wrong password")
 
-# Protected route
+        token = create_token({"sub": form.username})
+
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
+
+    except Exception as e:
+        print("LOGIN ERROR:", e)
+        raise HTTPException(500, "Server error")
+
+# PROTECTED
 @app.get("/protected")
 def protected(user: str = Depends(get_current_user)):
     return {"message": f"Welcome {user}"}

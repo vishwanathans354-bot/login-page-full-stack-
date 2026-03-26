@@ -1,57 +1,54 @@
-const BASE = "http://127.0.0.1:8000";
+let token = localStorage.getItem("token") || "";
 
 // REGISTER
 async function register() {
-  const email = document.getElementById("reg_email").value;
-  const password = document.getElementById("reg_password").value;
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
 
-  const res = await fetch(`${BASE}/register`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ email, password })
-  });
+    const res = await fetch("/register", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ email, password })
+    });
 
-  const data = await res.json();
-  document.getElementById("reg_msg").innerText = data.message || data.detail;
+    const data = await res.json();
+    document.getElementById("msg").innerText = JSON.stringify(data);
 }
 
-// LOGIN
+// LOGIN (FORM DATA)
 async function login() {
-  const email = document.getElementById("login_email").value;
-  const password = document.getElementById("login_password").value;
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
 
-  const res = await fetch(`${BASE}/login`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ email, password })
-  });
+    const form = new URLSearchParams();
+    form.append("username", email);
+    form.append("password", password);
 
-  const data = await res.json();
+    const res = await fetch("/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: form
+    });
 
-  if (data.access_token) {
-    localStorage.setItem("token", data.access_token);
-    window.location.href = "dashboard.html";
-  } else {
-    document.getElementById("login_msg").innerText = data.detail;
-  }
+    const data = await res.json();
+
+    if (data.access_token) {
+        token = data.access_token;
+        localStorage.setItem("token", token);
+        window.location.href = "/dashboard";
+    } else {
+        document.getElementById("msg").innerText = JSON.stringify(data);
+    }
 }
 
 // PROTECTED
-async function getProtectedData() {
-  const token = localStorage.getItem("token");
+async function loadData() {
+    const res = await fetch("/protected", {
+        headers: {
+            "Authorization": "Bearer " + token
+        }
+    });
 
-  const res = await fetch(`${BASE}/protected`, {
-    headers: {
-      "Authorization": `Bearer ${token}`
-    }
-  });
-
-  const data = await res.json();
-  document.getElementById("data").innerText = data.message;
-}
-
-// LOGOUT
-function logout() {
-  localStorage.removeItem("token");
-  window.location.href = "login.html";
+    const data = await res.json();
+    document.getElementById("msg").innerText = JSON.stringify(data);
 }
