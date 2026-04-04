@@ -1,10 +1,42 @@
-.container{
-    padding: 200px;
-    text-align: center;
-    margin: 300px;
-    width: 20%;
-    background-color: rgb(204, 212, 212);
-    border-radius: 30px;
-    height: 50px;
+body {
+  margin: 0;
+  height: 100vh;
 
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background-image: url("back.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.container {
+  width: 50%;
+  max-width: 350px;
+  padding: 25px;
+
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 15px;
+  text-align: center;
+}
+
+/* Inputs */
+.email,
+.pass {
+  width: 70%;        /* IMPORTANT */
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  box-sizing: border-box; /* prevents overflow */
+}
+
+/* Button */
+.button {
+  width: 50%;        /* full width on mobile */
+  padding: 10px;
+  border-radius: 5px;
+  cursor: pointer;
 }
